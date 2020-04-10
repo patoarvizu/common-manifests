@@ -1,0 +1,13 @@
+[plugins.opt]
+path = "/var/lib/rancher/k3s/agent/containerd"
+
+[plugins.cri]
+stream_server_address = "127.0.0.1"
+stream_server_port = "10010"
+  [plugins.cri.cni]
+    bin_dir = "/bin"
+    conf_dir = "/var/lib/rancher/k3s/agent/etc/cni/net.d"
+
+[plugins.cri.registry.mirrors]
+  [plugins.cri.registry.mirrors."default-docker-registry:5000"]
+    endpoint = ["http://default-docker-registry:5000"]

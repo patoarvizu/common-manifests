@@ -1,0 +1,216 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: opa
+  labels:
+    opa-control-plane: "true"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: opa-role
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: opa
+  namespace: opa
+  labels:
+    opa-control-plane: "true"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  creationTimestamp: null
+  name: opa-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: opa-role
+subjects:
+- kind: ServiceAccount
+  name: opa
+  namespace: opa
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: opa
+  namespace: opa
+  labels:
+    opa-control-plane: "true"
+spec:
+  selector:
+    app: opa
+  ports:
+  - name: https
+    protocol: TCP
+    port: 443
+    targetPort: https
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: opa
+    opa-control-plane: "true"
+  name: opa
+  namespace: opa
+spec:
+  template:
+    metadata:
+      labels:
+        app: opa
+        opa-control-plane: "true"
+      name: opa
+    spec:
+      serviceAccountName: opa
+      containers:
+      - name: opa
+        image: openpolicyagent/opa:0.17.0
+        args:
+        - run
+        - --server
+        - --tls-cert-file=/certs/tls.crt
+        - --tls-private-key-file=/certs/tls.key
+        - --addr=https://0.0.0.0:443
+        - --addr=http://127.0.0.1:8181
+        - --log-level=error
+        volumeMounts:
+          - readOnly: true
+            mountPath: /certs
+            name: opa-server
+        readinessProbe:
+          httpGet:
+            path: /health
+            scheme: HTTPS
+            port: https
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            scheme: HTTPS
+            port: https
+        ports:
+        - containerPort: 443
+          name: https
+      - name: kube-mgmt
+        image: openpolicyagent/kube-mgmt:0.11
+        args:
+        - --policies=vault,opa,default
+        - --enable-data=true
+        - --require-policy-label=true
+      volumes:
+      - name: opa-server
+        secret:
+          secretName: opa-server-secret
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: opa-webhook
+  namespace: opa
+spec:
+  secretName: opa-server-secret
+  duration: 2160h
+  renewBefore: 360h
+  commonName: opa
+  dnsNames:
+  - opa
+  - opa.opa
+  - opa.opa.svc
+  issuerRef:
+    name: selfsigning-issuer
+    kind: ClusterIssuer
+---
+# ---
+# Example
+# ---
+# kind: ValidatingWebhookConfiguration
+# apiVersion: admissionregistration.k8s.io/v1beta1
+# metadata:
+#   name: opa-validating-webhook
+#   annotations:
+#     cert-manager.io/inject-ca-from: opa/opa-webhook
+# webhooks:
+# - name: validating-webhook.openpolicyagent.org
+#   rules:
+#   - apiGroups:
+#     - ""
+#     apiVersions:
+#     - v1
+#     operations:
+#     - CREATE
+#     - UPDATE
+#     resources:
+#     - services
+#   - apiGroups:
+#     - extensions
+#     apiVersions:
+#     - v1beta1
+#     operations:
+#     - CREATE
+#     - UPDATE
+#     resources:
+#     - ingresses
+#   clientConfig:
+#     caBundle: Cg==
+#     service:
+#       namespace: opa
+#       name: opa
+#   namespaceSelector:
+#     matchExpressions:
+#     - key: opa-control-plane
+#       operator: DoesNotExist
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: opa-default-system-main
+  namespace: opa
+  labels:
+    openpolicyagent.org/policy: rego
+data:
+  main: |
+    package system
+
+    import data.kubernetes.admission
+
+    main = {
+      "apiVersion": "admission.k8s.io/v1beta1",
+      "kind": "AdmissionReview",
+      "response": response,
+    }
+
+    default response = {"allowed": true}
+
+    response = {
+        "allowed": false,
+        "status": {
+            "reason": reason,
+        },
+    }{
+        reason = concat(", ", admission.deny)
+        reason != ""
+    }
