@@ -59,7 +59,14 @@ spec:
         - name: app-role
           token_policies:
           - allow_secrets
-          token_ttl: 1h
+          token_ttl: 5m
+      - type: github
+        config:
+          organization: patoarvizu-org
+          token_ttl: 5m
+        map:
+          teams:
+            vault: allow_secrets
     secrets:
       - path: secret-v1
         type: kv
