@@ -50,6 +50,12 @@ spec:
             bound_service_account_namespaces: vault
             policies: [ allow_secrets ]
             ttl: 5m
+      - type: approle
+        roles:
+        - name: app-role
+          token_policies:
+          - allow_secrets
+          token_ttl: 1h
     secrets:
       - path: secret
         type: kv
