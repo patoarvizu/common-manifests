@@ -63,6 +63,16 @@ spec:
         map:
           teams:
             vault: allow_secrets
+      - config: {}
+        roles:
+        - bound_iam_principal_arn:
+          - arn:aws:iam::199382196195:*
+          config_type: iam
+          name: iam-role
+          token_policies:
+          - allow_secrets
+          token_ttl: 5m
+        type: aws
     secrets:
       - path: secret
         type: kv
