@@ -35,6 +35,8 @@ spec:
     policies: []
     auth:
     - type: kubernetes
+      config:
+        disable_iss_validation: true
     secrets:
     - type: database
       configuration:
