@@ -10,7 +10,7 @@ spec:
   serviceAccount: vault
   serviceType: ClusterIP
   ingress:
-    annotations:
+    annotations: {}
     spec: {}
   volumes:
     - name: vault-file
